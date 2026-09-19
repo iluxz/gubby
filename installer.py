@@ -88,20 +88,35 @@ class InstallWorker(QThread):
             self.log.emit(f"warning: {r.stderr.strip()}")
 
     def _create_shortcut(self):
-        install_dir = os.path.join(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()), "gubby")
+        install_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gubby")
         os.makedirs(install_dir, exist_ok=True)
-        bat = os.path.join(install_dir, "gubby.bat")
-        with open(bat, "w") as f:
-            f.write(f'@echo off\nstart "" python "{install_dir}\\gubby.py"\n')
-        self.log.emit(f"shortcut created at {bat}")
 
-        # copy gubby files to install dir
-        src_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
-        for f in ["gubby.py", "gubby.png", "gubby.ico", "gubby_bounce.gif"]:
-            src = os.path.join(src_dir, f)
+        # copy gubby files from bundled pyinstaller temp dir
+        if getattr(sys, 'frozen', False):
+            src_dir = sys._MEIPASS
+        else:
+            src_dir = os.path.dirname(os.path.abspath(__file__))
+        copied = 0
+        for fname in ["gubby.py", "gubby.png", "gubby.ico", "gubby_bounce.gif", "gubby.exe"]:
+            src = os.path.join(src_dir, fname)
+            dst = os.path.join(install_dir, fname)
             if os.path.exists(src):
-                shutil.copy2(src, os.path.join(install_dir, f))
-        self.log.emit(f"installed to {install_dir}")
+                shutil.copy2(src, dst)
+                self.log.emit(f"  copied {fname}")
+                copied += 1
+            else:
+                self.log.emit(f"  skipped {fname}")
+
+        # create launcher bat
+        exe_path = os.path.join(install_dir, "gubby.exe")
+        bat_path = os.path.join(install_dir, "gubby.bat")
+        with open(bat_path, "w") as f:
+            if os.path.exists(exe_path):
+                f.write(f'@echo off\nstart "" "{exe_path}"\n')
+            else:
+                f.write(f'@echo off\nstart "" python "{os.path.join(install_dir, "gubby.py")}"\n')
+
+        self.log.emit(f"installed {copied} files to {install_dir}")
 
 
 class Installer(QMainWindow):
@@ -180,11 +195,17 @@ class Installer(QMainWindow):
             self.install_btn.setEnabled(True)
 
     def _launch(self):
-        install_dir = os.path.join(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()), "gubby")
-        gubby_py = os.path.join(install_dir, "gubby.py")
-        if not os.path.exists(gubby_py):
-            gubby_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gubby.py")
-        subprocess.Popen([self._python_cmd or "python", gubby_py])
+        install_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gubby")
+        exe_path = os.path.join(install_dir, "gubby.exe")
+        if os.path.exists(exe_path):
+            subprocess.Popen([exe_path])
+        else:
+            gubby_py = os.path.join(install_dir, "gubby.py")
+            if os.path.exists(gubby_py):
+                subprocess.Popen([self._python_cmd or "python", gubby_py])
+            else:
+                self.log.emit("gubby not found")
+                return
         self.close()
 
 
