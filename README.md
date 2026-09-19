@@ -1,6 +1,6 @@
 # gubby
 
-a multitool desktop app with 21 tools and a bouncing gubby mascot.
+a multitool desktop app with 21 tools and a bouncing gubby lolll
 
 ## install
 
